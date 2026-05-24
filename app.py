@@ -6,7 +6,7 @@ import shap
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("Agg")
-import google.generativeai as genai
+import requests
 import os
 import warnings
 warnings.filterwarnings("ignore")
@@ -147,9 +147,7 @@ def get_gemini_response(question: str, site_ctx: dict, score: float, site_name: 
     if not GEMINI_API_KEY:
         return "⚠️ Gemini API key not configured. Add GEMINI_API_KEY to Streamlit secrets."
 
-    genai.configure(api_key=GEMINI_API_KEY)
-
-    ctx = f"""You are the Goodman Decision Co-Pilot — an AI assistant for Goodman Group's
+    prompt = f"""You are the Goodman Decision Co-Pilot — an AI assistant for Goodman Group's
 Investment Committee, specialising in data centre site acquisition.
 
 CURRENT SITE: {site_name}
@@ -164,23 +162,24 @@ CURRENT SITE: {site_name}
 - XGBoost AI Score:     {score:.1f}/100
 
 Provide concise, IC-level analysis. For scenario questions (e.g. 'what if power costs rise?')
-reason through the financial and scoring impact. Under 200 words. Be direct and data-driven."""
+reason through the financial and scoring impact. Under 200 words. Be direct and data-driven.
 
-    prompt = f"{ctx}\n\nAnalyst question: {question}"
+Analyst question: {question}"""
 
-    # Try models in order until one works
     errors = []
-    for model_name in ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash-8b"]:
+    for model in ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash-8b", "gemini-1.5-flash"]:
         try:
-            m = genai.GenerativeModel(model_name)
-            resp = m.generate_content(prompt)
-            return resp.text
+            url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+                   f"{model}:generateContent?key={GEMINI_API_KEY}")
+            body = {"contents": [{"parts": [{"text": prompt}]}]}
+            r = requests.post(url, json=body, timeout=20)
+            if r.status_code == 200:
+                return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+            errors.append(f"{model}: HTTP {r.status_code} {r.text[:80]}")
         except Exception as e:
-            errors.append(f"{model_name}: {str(e)[:80]}")
-            continue
+            errors.append(f"{model}: {str(e)[:80]}")
 
-    error_detail = " | ".join(errors)
-    return f"⚠️ Could not reach Gemini API. Please check your API key in Streamlit secrets.\n\nDebug: {error_detail}"
+    return f"⚠️ Could not reach Gemini API.\n\nDebug: {' | '.join(errors)}"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
