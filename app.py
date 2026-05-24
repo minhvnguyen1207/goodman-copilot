@@ -170,7 +170,7 @@ reason through the financial and scoring impact. Under 200 words. Be direct and 
 
     # Try models in order until one works
     errors = []
-    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-pro"]:
+    for model_name in ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash-8b"]:
         try:
             m = genai.GenerativeModel(model_name)
             resp = m.generate_content(prompt)
