@@ -6,8 +6,7 @@ import shap
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("Agg")
-import requests
-import time
+import anthropic
 import os
 import warnings
 warnings.filterwarnings("ignore")
@@ -140,63 +139,43 @@ SITE_PRESETS = {
 }
 
 # ══════════════════════════════════════════════════════════════════════════════
-# GEMINI SETUP
+# CLAUDE API SETUP
 # ══════════════════════════════════════════════════════════════════════════════
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 
-def get_gemini_response(question: str, site_ctx: dict, score: float, site_name: str) -> str:
-    if not GEMINI_API_KEY:
-        return "⚠️ Gemini API key not configured. Add GEMINI_API_KEY to Streamlit secrets."
+def get_claude_response(question: str, site_ctx: dict, score: float, site_name: str) -> str:
+    if not ANTHROPIC_API_KEY:
+        return "⚠️ API key not configured. Add ANTHROPIC_API_KEY to Streamlit secrets."
 
     prompt = f"""You are the Goodman Decision Co-Pilot — an AI assistant for Goodman Group's
 Investment Committee, specialising in data centre site acquisition.
 
 CURRENT SITE: {site_name}
-- Power Capacity:       {site_ctx['Power Capacity (MW)']:.0f} MW
-- Electricity Cost:     A${site_ctx['Power Cost (A$/MWh)']:.0f}/MWh
-- Renewable Energy:     {site_ctx['Renewable Energy (%)']:.0f}%
-- Land Acquisition:     A${site_ctx['Land Cost (A$M)']:.0f}M
-- Fibre Distance:       {site_ctx['Fibre Distance (km)']:.1f} km
-- Hyperscale Demand:    {site_ctx['Hyperscale Demand (0-10)']:.1f}/10
-- Labour Market:        {site_ctx['Labour Market Score (0-10)']:.1f}/10
-- Regulatory Ease:      {site_ctx['Regulatory Ease (0-10)']:.1f}/10
-- XGBoost AI Score:     {score:.1f}/100
+- Power Capacity:    {site_ctx['Power Capacity (MW)']:.0f} MW
+- Electricity Cost:  A${site_ctx['Power Cost (A$/MWh)']:.0f}/MWh
+- Renewable Energy:  {site_ctx['Renewable Energy (%)']:.0f}%
+- Land Acquisition:  A${site_ctx['Land Cost (A$M)']:.0f}M
+- Fibre Distance:    {site_ctx['Fibre Distance (km)']:.1f} km
+- Hyperscale Demand: {site_ctx['Hyperscale Demand (0-10)']:.1f}/10
+- Labour Market:     {site_ctx['Labour Market Score (0-10)']:.1f}/10
+- Regulatory Ease:   {site_ctx['Regulatory Ease (0-10)']:.1f}/10
+- XGBoost AI Score:  {score:.1f}/100
 
 Provide concise, IC-level analysis. For scenario questions (e.g. 'what if power costs rise?')
 reason through the financial and scoring impact. Under 200 words. Be direct and data-driven.
 
 Analyst question: {question}"""
 
-    # Only try models confirmed available on this account
-    models = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
-    last_error = ""
-
-    for model in models:
-        for attempt in range(3):  # retry up to 3 times per model on 429
-            try:
-                url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-                       f"{model}:generateContent?key={GEMINI_API_KEY}")
-                body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
-                r = requests.post(url, json=body, timeout=30)
-                data = r.json()
-
-                if r.status_code == 200:
-                    return data["candidates"][0]["content"]["parts"][0]["text"]
-
-                err = data.get("error", {})
-                last_error = f"{model} HTTP {r.status_code}: {err.get('message', str(data))[:120]}"
-
-                if r.status_code == 429:
-                    time.sleep(5 * (attempt + 1))
-                    continue
-
-                break  # non-429 error, try next model
-
-            except Exception as e:
-                last_error = f"{model}: {str(e)[:120]}"
-                break
-
-    return f"⚠️ Gemini error — {last_error}"
+    try:
+        client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+        message = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return message.content[0].text
+    except Exception as e:
+        return f"⚠️ Claude API error: {str(e)}"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
@@ -204,7 +183,7 @@ Analyst question: {question}"""
 tab1, tab2, tab3 = st.tabs([
     "🏗️  Site Scoring  (XGBoost ML)",
     "⚡  AI Explanation  (SHAP)",
-    "💬  Co-Pilot Chat  (Gemini AI)",
+    "💬  Co-Pilot Chat  (Claude AI)",
 ])
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -378,19 +357,19 @@ with tab2:
 # TAB 3: CO-PILOT CHAT
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
-    st.markdown("### Co-Pilot Chat — Powered by Google Gemini AI")
+    st.markdown("### Co-Pilot Chat — Powered by Claude AI (Anthropic)")
     st.markdown("""<p style='color:#64748b;font-size:13px'>
     Ask the Co-Pilot to analyse scenarios, explain the AI score, compare sites, or draft IC memo language.
     Each response uses live site data from Tab 1 as context.
     </p>""", unsafe_allow_html=True)
 
-    with st.expander("🔑 Configure Gemini API Key", expanded=not GEMINI_API_KEY):
-        api_key_input = st.text_input("Paste your Google Gemini API key", type="password",
-                                       value=GEMINI_API_KEY,
-                                       help="Get free key at aistudio.google.com → Get API Key")
+    with st.expander("🔑 Configure Claude API Key", expanded=not ANTHROPIC_API_KEY):
+        api_key_input = st.text_input("Paste your Anthropic API key", type="password",
+                                       value=ANTHROPIC_API_KEY,
+                                       help="Get key at console.anthropic.com → API Keys")
         if api_key_input:
-            os.environ["GEMINI_API_KEY"] = api_key_input
-            GEMINI_API_KEY = api_key_input
+            os.environ["ANTHROPIC_API_KEY"] = api_key_input
+            ANTHROPIC_API_KEY = api_key_input
             st.success("API key saved for this session.")
 
     if "pred_score" not in st.session_state:
@@ -414,7 +393,7 @@ with tab3:
           <div><span style='color:#64748b;font-size:11px'>HYPERSCALE</span><br>
                <span style='color:#e2e8f0;font-weight:600'>{site_input['Hyperscale Demand (0-10)']:.1f}/10</span></div>
           <div><span style='color:#64748b;font-size:11px'>AI MODEL</span><br>
-               <span style='color:#60a5fa;font-weight:600'>Google Gemini 2.0 Flash</span></div>
+               <span style='color:#60a5fa;font-weight:600'>Claude Haiku (Anthropic)</span></div>
         </div>""", unsafe_allow_html=True)
 
         # Suggested questions
@@ -452,8 +431,8 @@ with tab3:
             with st.chat_message("user", avatar="👤"):
                 st.markdown(user_msg)
             with st.chat_message("assistant", avatar="🤖"):
-                with st.spinner("Gemini AI analysing..."):
-                    response = get_gemini_response(user_msg, site_input, score, site_name)
+                with st.spinner("Claude AI analysing..."):
+                    response = get_claude_response(user_msg, site_input, score, site_name)
                 st.markdown(response)
             st.session_state["chat_history"].append({"role":"assistant","content":response})
 
@@ -465,6 +444,6 @@ with tab3:
 # ── Footer ────────────────────────────────────────────────────────────────────
 st.markdown("---")
 st.markdown("""<div style='text-align:center;color:#374151;font-size:12px'>
-  Goodman Decision Co-Pilot · ISYS3443 Assessment 3 · XGBoost · SHAP · Google Gemini AI · Streamlit<br>
+  Goodman Decision Co-Pilot · ISYS3443 Assessment 3 · XGBoost · SHAP · Claude AI (Anthropic) · Streamlit<br>
   <span style='color:#1f2937'>AI output is for analytical support only. All investment decisions require human IC approval.</span>
 </div>""", unsafe_allow_html=True)
