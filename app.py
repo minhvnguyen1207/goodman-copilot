@@ -42,7 +42,7 @@ with col_logo:
     st.markdown("<div style='background:#f97316;width:48px;height:48px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:800;color:white;margin-top:4px'>G</div>", unsafe_allow_html=True)
 with col_title:
     st.markdown("<h1 style='margin:0;font-size:26px'>Goodman Decision Co-Pilot</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='margin:0;color:#64748b;font-size:13px'>AI-Powered Data Centre Site Intelligence · XGBoost + SHAP + Google Gemini</p>", unsafe_allow_html=True)
+    st.markdown("<p style='margin:0;color:#64748b;font-size:13px'>AI-Powered Data Centre Site Intelligence · XGBoost + SHAP + Claude</p>", unsafe_allow_html=True)
 with col_badge:
     st.markdown("<div style='background:#064e3b;border:1px solid #34d399;border-radius:20px;padding:6px 14px;color:#34d399;font-size:12px;font-weight:700;margin-top:8px'>● Live · ML Active</div>", unsafe_allow_html=True)
 
