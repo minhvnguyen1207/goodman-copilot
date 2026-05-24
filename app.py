@@ -146,8 +146,9 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 def get_gemini_response(question: str, site_ctx: dict, score: float, site_name: str) -> str:
     if not GEMINI_API_KEY:
         return "⚠️ Gemini API key not configured. Add GEMINI_API_KEY to Streamlit secrets."
+
     genai.configure(api_key=GEMINI_API_KEY)
-    m = genai.GenerativeModel("gemini-2.0-flash")
+
     ctx = f"""You are the Goodman Decision Co-Pilot — an AI assistant for Goodman Group's
 Investment Committee, specialising in data centre site acquisition.
 
@@ -164,8 +165,22 @@ CURRENT SITE: {site_name}
 
 Provide concise, IC-level analysis. For scenario questions (e.g. 'what if power costs rise?')
 reason through the financial and scoring impact. Under 200 words. Be direct and data-driven."""
-    resp = m.generate_content(f"{ctx}\n\nAnalyst question: {question}")
-    return resp.text
+
+    prompt = f"{ctx}\n\nAnalyst question: {question}"
+
+    # Try models in order until one works
+    errors = []
+    for model_name in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-flash-latest", "gemini-pro"]:
+        try:
+            m = genai.GenerativeModel(model_name)
+            resp = m.generate_content(prompt)
+            return resp.text
+        except Exception as e:
+            errors.append(f"{model_name}: {str(e)[:80]}")
+            continue
+
+    error_detail = " | ".join(errors)
+    return f"⚠️ Could not reach Gemini API. Please check your API key in Streamlit secrets.\n\nDebug: {error_detail}"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
