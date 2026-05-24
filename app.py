@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.use("Agg")
 import requests
+import time
 import os
 import warnings
 warnings.filterwarnings("ignore")
@@ -166,20 +167,33 @@ reason through the financial and scoring impact. Under 200 words. Be direct and 
 
 Analyst question: {question}"""
 
-    errors = []
-    for model in ["gemini-2.0-flash-lite", "gemini-2.0-flash", "gemini-1.5-flash-8b", "gemini-1.5-flash"]:
-        try:
-            url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
-                   f"{model}:generateContent?key={GEMINI_API_KEY}")
-            body = {"contents": [{"parts": [{"text": prompt}]}]}
-            r = requests.post(url, json=body, timeout=20)
-            if r.status_code == 200:
-                return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-            errors.append(f"{model}: HTTP {r.status_code} {r.text[:80]}")
-        except Exception as e:
-            errors.append(f"{model}: {str(e)[:80]}")
+    # Only try models confirmed available on this account
+    models = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
 
-    return f"⚠️ Could not reach Gemini API.\n\nDebug: {' | '.join(errors)}"
+    for model in models:
+        for attempt in range(3):  # retry up to 3 times per model on 429
+            try:
+                url = (f"https://generativelanguage.googleapis.com/v1beta/models/"
+                       f"{model}:generateContent?key={GEMINI_API_KEY}")
+                body = {"contents": [{"role": "user", "parts": [{"text": prompt}]}]}
+                r = requests.post(url, json=body, timeout=30)
+                data = r.json()
+
+                if r.status_code == 200:
+                    return data["candidates"][0]["content"]["parts"][0]["text"]
+
+                if r.status_code == 429:
+                    # Rate limited — wait and retry
+                    time.sleep(5 * (attempt + 1))
+                    continue
+
+                # Any other error — try next model
+                break
+
+            except Exception:
+                break
+
+    return "⚠️ Gemini API busy. Please wait a moment and try again."
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
