@@ -169,6 +169,7 @@ Analyst question: {question}"""
 
     # Only try models confirmed available on this account
     models = ["gemini-2.0-flash", "gemini-2.0-flash-lite"]
+    last_error = ""
 
     for model in models:
         for attempt in range(3):  # retry up to 3 times per model on 429
@@ -182,18 +183,20 @@ Analyst question: {question}"""
                 if r.status_code == 200:
                     return data["candidates"][0]["content"]["parts"][0]["text"]
 
+                err = data.get("error", {})
+                last_error = f"{model} HTTP {r.status_code}: {err.get('message', str(data))[:120]}"
+
                 if r.status_code == 429:
-                    # Rate limited — wait and retry
                     time.sleep(5 * (attempt + 1))
                     continue
 
-                # Any other error — try next model
+                break  # non-429 error, try next model
+
+            except Exception as e:
+                last_error = f"{model}: {str(e)[:120]}"
                 break
 
-            except Exception:
-                break
-
-    return "⚠️ Gemini API busy. Please wait a moment and try again."
+    return f"⚠️ Gemini error — {last_error}"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # TABS
